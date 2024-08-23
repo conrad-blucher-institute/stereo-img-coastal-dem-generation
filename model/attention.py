@@ -43,9 +43,6 @@ def init_(tensor):
     return tensor
 
 
-
-
-
 # feedforward
 class GEGLU(nn.Module):
     def __init__(self, dim_in, dim_out):
@@ -58,21 +55,21 @@ class GEGLU(nn.Module):
 
 class RegressionHead(nn.Module):
 
-    def __init__(self, embed_dim, img_size = (120, 150)):
+    def __init__(self, embed_dim, img_size = (150, 120)):
         super().__init__()
         self.embed_dim = embed_dim
         self.img_size = img_size
 
         # reshape 
         self.norm =nn.LayerNorm(embed_dim)
-        self.lfc = nn.Linear(self.embed_dim, self.img_size[0]*self.img_size[1], bias=True)  
+        self.lfc = nn.Linear(self.embed_dim, 360, bias=True)  
         self.fcn = nn.GELU()
 
     def forward(self, x):
         x = self.norm(x)
         x = self.lfc(x)
         x = self.fcn(x)
-        x = x.view(x.shape[0], 1, self.img_size[0], self.img_size[1])
+        x = x.view(x.shape[0], self.img_size[0], self.img_size[1])
 
         return x
 
@@ -118,8 +115,7 @@ class PreNorm(nn.Module):
         else:
             # Single tensor processing as usual
             return self.fn(self.norm(x), **kwargs)
-        
-    
+          
 class PatchEmbedding(nn.Module):
     def __init__(self, img_size = (640, 240), patch_size=(80, 80), emb_size=768, dropout_rate=0.1):
         super().__init__()
@@ -134,9 +130,9 @@ class PatchEmbedding(nn.Module):
         self.n_patches = h_patches * w_patches
         
 
-        self.patch_embeddings = nn.Conv2d(in_channels=1, out_channels=emb_size,
+        self.patch_embeddings = nn.Conv2d(in_channels=3, out_channels=emb_size,
                                           kernel_size=patch_size, stride=patch_size)
-        self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_patches + 2, emb_size))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, (self.num_patches*2) + 2, emb_size))
         self.cls_token = nn.Parameter(torch.zeros(1, 1, emb_size))
         self.dropout = nn.Dropout(dropout_rate)
         self.layer_norm = nn.LayerNorm(emb_size)
@@ -168,46 +164,40 @@ class PatchEmbedding(nn.Module):
         
         return x
 
-
 class SpatialAttention(nn.Module):
     def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
         super().__init__()
         inner_dim = dim_head * heads
-        project_out = not (heads == 1 and dim_head == dim)
-
         self.heads = heads
         self.scale = dim_head ** -0.5
 
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
-
         self.to_out = nn.Sequential(
             nn.Linear(inner_dim, dim),
             nn.Dropout(dropout)
-        ) if project_out else nn.Identity()
+        )
 
     def forward(self, x):
-        b, n, _, h = *x.shape, self.heads
+        b, n, _ = x.shape
         qkv = self.to_qkv(x).chunk(3, dim=-1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), qkv)
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qkv)
 
-        dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
-
+        dots = torch.einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
         attn = dots.softmax(dim=-1)
 
-        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+        out = torch.einsum('b h i j, b h j d -> b h i d', attn, v)
         out = rearrange(out, 'b h n d -> b n (h d)')
-        out = self.to_out(out)
-        return out
+        return self.to_out(out)
 
 class SpatialEncoder(nn.Module):
     def __init__(self, dim, depth, heads, dim_head, mult=4, dropout=0.):
         super().__init__()
-        self.layers = nn.ModuleList([])
+        self.layers = nn.ModuleList()
         self.norm = nn.LayerNorm(dim)
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
                 PreNorm(dim, SpatialAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
-                PreNorm(dim, FeedForward(dim, dim_out=dim, mult=mult, dropout=dropout))
+                PreNorm(dim, FeedForward(dim, mult=mult, dropout=dropout))
             ]))
 
     def forward(self, x):
@@ -215,3 +205,54 @@ class SpatialEncoder(nn.Module):
             x = attn(x) + x
             x = ff(x) + x
         return self.norm(x)
+
+
+
+
+
+# class SpatialAttention(nn.Module):
+#     def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
+#         super().__init__()
+#         inner_dim = dim_head * heads
+#         project_out = not (heads == 1 and dim_head == dim)
+
+#         self.heads = heads
+#         self.scale = dim_head ** -0.5
+
+#         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
+
+#         self.to_out = nn.Sequential(
+#             nn.Linear(inner_dim, dim),
+#             nn.Dropout(dropout)
+#         ) if project_out else nn.Identity()
+
+#     def forward(self, x):
+#         b, n, _, h = *x.shape, self.heads
+#         qkv = self.to_qkv(x).chunk(3, dim=-1)
+#         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), qkv)
+
+#         dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
+
+#         attn = dots.softmax(dim=-1)
+
+#         out = einsum('b h i j, b h j d -> b h i d', attn, v)
+#         out = rearrange(out, 'b h n d -> b n (h d)')
+#         out = self.to_out(out)
+#         return out
+
+# class SpatialEncoder(nn.Module):
+#     def __init__(self, dim, depth, heads, dim_head, mult=4, dropout=0.):
+#         super().__init__()
+#         self.layers = nn.ModuleList([])
+#         self.norm = nn.LayerNorm(dim)
+#         for _ in range(depth):
+#             self.layers.append(nn.ModuleList([
+#                 PreNorm(dim, SpatialAttention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
+#                 PreNorm(dim, FeedForward(dim, dim_out=dim, mult=mult, dropout=dropout))
+#             ]))
+
+#     def forward(self, x):
+#         for attn, ff in self.layers:
+#             x = attn(x) + x
+#             x = ff(x) + x
+#         return self.norm(x)

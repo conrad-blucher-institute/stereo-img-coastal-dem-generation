@@ -4,7 +4,7 @@ import torch
 import argparse
 import numpy as np
 import random
-from src import dataloader
+from src import dl
 from model import engine
 
 from model.depth_vit import DemViT
@@ -33,25 +33,10 @@ def main(args):
     wd = args.wd
     epochs = args.epochs
 
-    data_loader_training, data_loader_validate, data_loader_test = dataloader.return_data_loaders(
+    data_loader_training, data_loader_validate, data_loader_test = dl.return_data_loaders(
         batch_size = batch_size, 
         exp_name = Exp_name
         )
-    # Check if the DataLoader is empty
-    if len(dataloader) == 0:
-        print("The DataLoader is empty.")
-    else:
-        print(f"The DataLoader contains {len(dataloader)} batches.")
-        
-    # try:
-    #     # Fetch the first batch
-    #     first_batch = next(iter(data_loader_training))
-    #     print("First batch loaded successfully:", first_batch)
-    # except StopIteration:
-    #     print("The DataLoader is empty.")
-    # except Exception as e:
-    #     print("An error occurred:", str(e))
-
 
     model = DemViT().to(device)
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -65,7 +50,7 @@ def main(args):
 
     _ = YE.train(data_loader_training, data_loader_validate, 
                       epochs = epochs, 
-                      loss_stop_tolerance = 20)
+                      loss_stop_tolerance = 200)
 
 
     # _ = YE.predict(model, data_loader_training, category= 'train', iter = 1)
@@ -87,7 +72,7 @@ if __name__ == "__main__":
     parser.add_argument("--postnorm",    type=str,   default = False, help = "Post or Before Normalization for Self-Attention")
     parser.add_argument("--lr",          type=float, default = 0.0001, help = "Learning rate")
     parser.add_argument("--wd",          type=float, default = 0.01,  help = "Value of weight decay")
-    parser.add_argument("--epochs",      type=int,   default = 100,   help = "The number of epochs")
+    parser.add_argument("--epochs",      type=int,   default = 200,   help = "The number of epochs")
 
     args = parser.parse_args()
 

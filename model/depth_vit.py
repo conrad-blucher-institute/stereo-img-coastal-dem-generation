@@ -1,13 +1,19 @@
 # import sys
 # sys.path.append('../')
 # from DepthAnythingV2.depth_anything_v2.dpt import DepthAnythingV2
-
+import random
 import torch
 from torch import nn
 import os 
 import numpy as np
-from model import engine
 
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 from model.attention import RegressionHead, PatchEmbedding, SpatialEncoder
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -34,7 +40,7 @@ class DemViT(nn.Module):
 
         self.encoder = SpatialEncoder(dim = 768, depth = 8, heads = 8, dim_head = 96, mult=4, dropout=0.1)
         
-        self.head = RegressionHead(embed_dim = 768, img_size = (120, 150))
+        self.head = RegressionHead(embed_dim = 768, img_size = (150, 120))
 
     # def depth_process(self, img):
     #     # If img is batched, process each image in the batch
@@ -60,17 +66,16 @@ class DemViT(nn.Module):
                 left: torch.Tensor,
                 right: torch.Tensor): 
 
-        # left = left.permute(0, 3, 1, 2)
-        # right = right.permute(0, 3, 1, 2)
+        left = left.permute(0, 3, 1, 2)
+        right = right.permute(0, 3, 1, 2)
         
         # left_depth = self.depth_process(left)
         # right_depth = self.depth_process(right)
 
         img = self.img_embeds(left, right)
+        img = self.encoder(img)
 
-        img, attn = self.encoder(img)
-        img = img.mean(dim=1)
-
+        # img = img.mean(dim=1)
         preds = self.head(img)
 
         return preds
