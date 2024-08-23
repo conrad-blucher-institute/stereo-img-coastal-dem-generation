@@ -1,0 +1,10 @@
+nohup: ignoring input
+/home/hkamangir/anaconda3/envs/env/lib/python3.8/site-packages/torch/cuda/__init__.py:128: UserWarning: CUDA initialization: The NVIDIA driver on your system is too old (found version 10010). Please update your GPU driver by downloading and installing a new version from the URL: http://www.nvidia.com/Download/index.aspx Alternatively, go to: https://pytorch.org to install a PyTorch version that has been compiled with your version of the CUDA driver. (Triggered internally at ../c10/cuda/CUDAFunctions.cpp:108.)
+  return torch._C._cuda_getDeviceCount() > 0
+(34, 5) (11, 5) (11, 5)
+Traceback (most recent call last):
+  File "run.py", line 94, in <module>
+    main(args)
+  File "run.py", line 41, in main
+    if len(dataloader) == 0:
+TypeError: object of type 'module' has no len()
