@@ -10,8 +10,8 @@ from scipy.ndimage import gaussian_filter
 import sys
 sys.path.append('../')
 from model.depth_vit import DemViT
-
-
+import seaborn as sns
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 seed = 42
 import random
 random.seed(seed)
@@ -20,6 +20,65 @@ torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
+
+PLOT_CMAP = 'viridis'
+PLOT_MINCNT = 100
+PLOT_VIS_FACE_COLOR = 'white'
+PLOT_BOX_FACE_COLOR = 'grey'
+MAXIMUM_AXIS_VALUE = 2
+
+import matplotlib.gridspec as gridspec
+class SeabornFig2Grid():
+
+    def __init__(self, seaborngrid, fig,  subplot_spec):
+        self.fig = fig
+        self.sg = seaborngrid
+        self.subplot = subplot_spec
+        if isinstance(self.sg, sns.axisgrid.FacetGrid) or isinstance(self.sg, sns.axisgrid.PairGrid):
+            self._movegrid()
+        elif isinstance(self.sg, sns.axisgrid.JointGrid):
+            self._movejointgrid()
+        self._finalize()
+
+    def _movegrid(self):
+        """ Move PairGrid or Facetgrid """
+        self._resize()
+        n = self.sg.axes.shape[0]
+        m = self.sg.axes.shape[1]
+        self.subgrid = gridspec.GridSpecFromSubplotSpec(n,m, subplot_spec=self.subplot)
+        for i in range(n):
+            for j in range(m):
+                self._moveaxes(self.sg.axes[i,j], self.subgrid[i,j])
+
+    def _movejointgrid(self):
+        """ Move Jointgrid """
+        h= self.sg.ax_joint.get_position().height
+        h2= self.sg.ax_marg_x.get_position().height
+        r = int(np.round(h/h2))
+        self._resize()
+        self.subgrid = gridspec.GridSpecFromSubplotSpec(r+1,r+1, subplot_spec=self.subplot)
+
+        self._moveaxes(self.sg.ax_joint, self.subgrid[1:, :-1])
+        self._moveaxes(self.sg.ax_marg_x, self.subgrid[0, :-1])
+        self._moveaxes(self.sg.ax_marg_y, self.subgrid[1:, -1])
+
+    def _moveaxes(self, ax, gs):
+        #https://stackoverflow.com/a/46906599/4124317
+        ax.remove()
+        ax.figure=self.fig
+        self.fig.axes.append(ax)
+        self.fig.add_axes(ax)
+        ax._subplotspec = gs
+        ax.set_position(gs.get_position(self.fig))
+        ax.set_subplotspec(gs)
+
+    def _finalize(self):
+        plt.close(self.sg.fig)
+        self.fig.canvas.mpl_connect("resize_event", self._resize)
+        self.fig.canvas.draw()
+
+    def _resize(self, evt=None):
+        self.sg.fig.set_size_inches(self.fig.get_size_inches())
 
 
 
@@ -118,6 +177,66 @@ def scatter_plot(train, val, test):
     plt.tight_layout()
     plt.show()
 
+def _plot_scatter(data):
+
+    sigma = 4  # Standard deviation of the Gaussian kernel, adjust as needed
+    true_values = np.concatenate([zero_interpolation(d['true'][0, ...]).flatten() for d in data]).flatten()
+    pred_values = np.concatenate([gaussian_filter(zero_interpolation(d['pred'][0, ...]), sigma = sigma).flatten() for d in data]).flatten()
+    
+    # Calculate RMSE and R2
+    rmse = np.sqrt(mean_squared_error(true_values, pred_values))
+    r2 = r2_score(true_values, pred_values)
+
+    g = sns.jointplot(x = true_values, 
+                        y = pred_values, 
+                        kind = "hex", 
+                        height = 8, 
+                        ratio = 4,
+                        xlim = [0.5, MAXIMUM_AXIS_VALUE], ylim=[0.5, MAXIMUM_AXIS_VALUE], 
+                        extent = [0.5, MAXIMUM_AXIS_VALUE, 0.5, MAXIMUM_AXIS_VALUE], 
+                        gridsize = 100,
+                        cmap = PLOT_CMAP, 
+                        mincnt = PLOT_MINCNT, 
+                        joint_kws = {"facecolor": PLOT_VIS_FACE_COLOR})
+
+    for patch in g.ax_marg_x.patches:
+        patch.set_facecolor(PLOT_BOX_FACE_COLOR)
+
+    for patch in g.ax_marg_y.patches:
+        patch.set_facecolor(PLOT_BOX_FACE_COLOR)
+
+    g.ax_joint.plot([0.5, MAXIMUM_AXIS_VALUE], [0.5, MAXIMUM_AXIS_VALUE], '--r', linewidth=2)
+
+    plt.xlabel('Measured DEM (m)', fontsize = 16)
+    plt.ylabel('Predicted DEM (m)', fontsize = 16)
+    plt.grid(False)
+
+    scores = (r'R^2={:.2f}' + '\n' + r'RMSE={:.3f} (m)').format(
+        r2, rmse)
+
+    plt.text(0.6, 2, scores, bbox=dict(facecolor = PLOT_VIS_FACE_COLOR, edgecolor = PLOT_BOX_FACE_COLOR, boxstyle = 'round, pad=0.2'),
+            fontsize = 16, ha='left', va = 'top')
+
+    return g
+
+
+
+def joinplot_hex_vis(train, val, test):
+    # Function to plot data
+    fig = plt.figure(figsize=(21, 7))
+    gs  = gridspec.GridSpec(1, 3)
+
+    train_plot = _plot_scatter(train)
+    valid_plot = _plot_scatter(val)
+    test_plot = _plot_scatter(test)
+
+    mg0 = SeabornFig2Grid(train_plot, fig, gs[0])
+    mg1 = SeabornFig2Grid(valid_plot, fig, gs[1])
+    mg2 = SeabornFig2Grid(test_plot, fig, gs[2])
+
+    gs.tight_layout(fig)
+    plt.show()
+
 def plot_sample_by_index(data, index):
     # Retrieve the specific item by index
     sample = data[index]
@@ -144,20 +263,49 @@ def plot_sample_by_index(data, index):
     axs[1].set_title('Right Image')
     axs[1].axis('off')  # Turn off axis
     
+    # # Plot True DEM with fixed color limits
+    # dem1 = axs[2].imshow(true_dem, cmap='viridis', vmin=1, vmax=1.5)
+    # axs[2].set_title('Measured DEM (m)')
+    # axs[2].axis('off')  # Turn off axis
+    # cbar1 = plt.colorbar(dem1, ax=axs[2], fraction=0.046, pad=0.04, shrink = 1.5)
+    # cbar1.set_label('Elevation [NAVD88] (m)')
+    
+    # # Plot Predicted DEM with fixed color limits
+    # dem2 = axs[3].imshow(pred_dem, cmap='viridis', vmin=1, vmax=1.5)
+    # axs[3].set_title('Predicted DEM (m)')
+    # axs[3].axis('off')  # Turn off axis
+    # cbar2 = plt.colorbar(dem2, ax=axs[3], fraction=0.046, pad=0.04, shrink = 1.5)
+    # cbar2.set_label('Elevation [NAVD88] (m)')
+
+    # # Create a divider for the existing axes instance
+    # divider2 = make_axes_locatable(axs[3])
+    # # Append a new axes to the right of axs[3], for the color bar
+    # cax2 = divider2.append_axes("right", size="5%", pad=0.05)
+    # cbar2 = plt.colorbar(dem2, cax=cax2)
+    # cbar2.set_label('Elevation [NAVD88] (m)')
     # Plot True DEM with fixed color limits
     dem1 = axs[2].imshow(true_dem, cmap='viridis', vmin=1, vmax=1.5)
-    axs[2].set_title('True DEM')
+    axs[2].set_title('Measured DEM (m)')
     axs[2].axis('off')  # Turn off axis
-    cbar1 = plt.colorbar(dem1, ax=axs[2], fraction=0.046, pad=0.04)
-    cbar1.set_label('Elevation')
-    
+
+    # Create a divider for the existing axes instance
+    divider1 = make_axes_locatable(axs[2])
+    # Append a new axes to the right of axs[2], for the color bar
+    cax1 = divider1.append_axes("right", size="5%", pad=0.05)
+    cbar1 = plt.colorbar(dem1, cax=cax1)
+    cbar1.set_label('Elevation [NAVD88] (m)')
+
     # Plot Predicted DEM with fixed color limits
     dem2 = axs[3].imshow(pred_dem, cmap='viridis', vmin=1, vmax=1.5)
-    axs[3].set_title('Predicted DEM')
+    axs[3].set_title('Predicted DEM (m)')
     axs[3].axis('off')  # Turn off axis
-    cbar2 = plt.colorbar(dem2, ax=axs[3], fraction=0.046, pad=0.04)
-    cbar2.set_label('Elevation')
-    
+
+    # Create a divider for the existing axes instance
+    divider2 = make_axes_locatable(axs[3])
+    # Append a new axes to the right of axs[3], for the color bar
+    cax2 = divider2.append_axes("right", size="5%", pad=0.05)
+    cbar2 = plt.colorbar(dem2, cax=cax2)
+    cbar2.set_label('Elevation [NAVD88] (m)')
     plt.show()
 
 def plot_tif_images_and_histograms(folder_path):

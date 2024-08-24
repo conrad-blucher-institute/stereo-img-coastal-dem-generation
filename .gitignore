@@ -5,3 +5,7 @@
 *.ali
 data
 EXPs
+inference/__pycache__/inference.cpython-311.pyc
+model/__pycache__/attention.cpython-311.pyc
+model/__pycache__/depth_vit.cpython-311.pyc
+src/__pycache__/dl.cpython-311.pyc
