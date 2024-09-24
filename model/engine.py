@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os 
 import random
-
+from pathlib import Path
 #======================================================================================================================================#
 #====================================================== Training Config ===============================================================#
 #======================================================================================================================================#   
@@ -88,8 +88,8 @@ class DEMPred:
         params = [p for p in self.model.parameters() if p.requires_grad]
         self.optimizer = torch.optim.Adam(params, lr=self.lr, weight_decay=self.wd)
 
-
-        self.exp_output_dir = '/home/hkaman/Documents/stereo-img-coastal-dem-generation/EXPs/' + 'EXP_' + self.exp
+        base_dir = Path('./EXPs')
+        self.exp_output_dir = base_dir / f'EXP_{self.exp}'
         self.best_model_name = os.path.join(self.exp_output_dir, 'best_model_' + self.exp + '.pth')
         self.loss_fig_name = os.path.join(self.exp_output_dir, 'loss', 'loss_' + self.exp + '.png')
         self.loss_df_name = os.path.join(self.exp_output_dir, 'loss', 'loss_' + self.exp + '.csv')

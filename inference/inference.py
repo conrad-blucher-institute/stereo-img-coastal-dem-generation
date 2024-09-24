@@ -84,7 +84,7 @@ class SeabornFig2Grid():
 
 def predict(data_loader, exp_name: str):
 
-    exp_output_dir = '/home/hkaman/Documents/stereo-img-coastal-dem-generation/EXPs/' + 'EXP_' + exp_name
+    exp_output_dir = r"C:\Users\mhajiesmaeeli\OneDrive - Texas A&M University-Corpus Christi\Documents\Mona\course\Thesis\GitHub\stereo-img-coastal-dem-generation\EXPs" + 'EXP_' + exp_name
     best_model_name = os.path.join(exp_output_dir, 'best_model_' + exp_name + '.pth')
 
     model = DemViT().to(device)

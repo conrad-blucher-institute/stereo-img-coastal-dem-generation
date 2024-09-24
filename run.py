@@ -21,6 +21,7 @@ torch.backends.cudnn.benchmark = False
 def main(args):
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(device)
     Exp_name = args.exp_name
     batch_size = args.batch_size
     embd_size = args.embd_size
@@ -35,7 +36,8 @@ def main(args):
 
     data_loader_training, data_loader_validate, data_loader_test = dl.return_data_loaders(
         batch_size = batch_size, 
-        exp_name = Exp_name
+        exp_name = Exp_name, 
+        strategy= 'timeseries'
         )
 
     model = DemViT().to(device)
@@ -62,7 +64,7 @@ if __name__ == "__main__":
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Imbalance Deep Yield Estimation")
-    parser.add_argument("--exp_name",    type=str,   default = "test",help = "Experiment name")
+    parser.add_argument("--exp_name",    type=str,   default = "004",help = "Experiment name")
     parser.add_argument("--batch_size",  type=int,   default = 64,   help = "Batch size")
     parser.add_argument("--embd_size",   type=int,   default = 768,  help = "Embedding size")
     parser.add_argument("--num_heads",   type=int,   default = 8,     help = "Number of attention heads")
